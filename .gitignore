@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+bin/
+tmp/
+*.log
+coverage/
+services/ai-engine/.venv/
+services/gateway/bin/

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package ragsvc.v1;
+
+option go_package = "github.com/amcolab/omni-rag/shared/gen/go/ragsvc/v1;ragsvcv1";
+
+message IngestRequest {
+  string project_id = 1;
+  string document_id = 2;
+  string file_name = 3;
+  bytes content = 4;
+}
+
+message IngestResponse {
+  string status = 1;
+  int32 chunks = 2;
+}
+
+message QueryRequest {
+  string project_id = 1;
+  string query = 2;
+  bool use_pro = 3;
+}
+
+message QueryChunk {
+  string token = 1;
+}
+
+service RagEngine {
+  rpc Ingest(IngestRequest) returns (IngestResponse);
+  rpc QueryStream(QueryRequest) returns (stream QueryChunk);
+}

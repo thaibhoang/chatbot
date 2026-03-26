@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+qdrant-client
+google-generativeai
+grpcio
+grpcio-tools
+python-multipart
+pypdf
+python-docx
