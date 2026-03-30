@@ -12,6 +12,7 @@ type Config struct {
 	RateLimitRPS           int
 	PostgresDSN            string
 	AdminJWTKey            string
+	APIKeyEncryptionSecret string
 	BootstrapAdminEmail    string
 	BootstrapAdminPassword string
 }
@@ -27,6 +28,7 @@ func Load() Config {
 			"postgres://omnirag:omnirag@postgres:5432/omnirag?sslmode=disable",
 		),
 		AdminJWTKey:            getenv("GATEWAY_ADMIN_JWT_KEY", "change-me"),
+		APIKeyEncryptionSecret: getenv("GATEWAY_API_KEY_ENCRYPTION_SECRET", "replace-me-32bytes-secret-key----"),
 		BootstrapAdminEmail:    getenv("GATEWAY_BOOTSTRAP_ADMIN_EMAIL", "admin@local"),
 		BootstrapAdminPassword: getenv("GATEWAY_BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
 	}

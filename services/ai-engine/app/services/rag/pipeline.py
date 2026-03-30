@@ -44,32 +44,56 @@ class RAGPipeline:
             embeddings=embeddings,
         )
 
-    async def answer_query(self, project_id: str, query: str, use_pro: bool, provider: str | None = None) -> str:
+    async def answer_query(
+        self,
+        project_id: str,
+        query: str,
+        use_pro: bool,
+        provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
+    ) -> str:
         # Tenant isolation must always be enforced by project_id filter.
         query_embedding = await self.openai.embed_texts([query])
         contexts = await self.vector_store.search(project_id=project_id, query_vector=query_embedding[0])
         resolved_provider = self._resolve_provider(provider)
         if resolved_provider == "gemini":
-            return await self.gemini.generate(query=query, contexts=contexts, use_pro=use_pro)
+            return await self.gemini.generate(
+                query=query, contexts=contexts, use_pro=use_pro, model=model, api_key=api_key
+            )
         if resolved_provider == "claude":
-            return await self.claude.generate(query=query, contexts=contexts, use_pro=use_pro)
-        return await self.openai.generate(query=query, contexts=contexts, use_pro=use_pro)
+            return await self.claude.generate(
+                query=query, contexts=contexts, use_pro=use_pro, model=model, api_key=api_key
+            )
+        return await self.openai.generate(query=query, contexts=contexts, use_pro=use_pro, model=model, api_key=api_key)
 
     async def answer_query_stream(
-        self, project_id: str, query: str, use_pro: bool, provider: str | None = None
+        self,
+        project_id: str,
+        query: str,
+        use_pro: bool,
+        provider: str | None = None,
+        model: str | None = None,
+        api_key: str | None = None,
     ) -> AsyncIterator[str]:
         query_embedding = await self.openai.embed_texts([query])
         contexts = await self.vector_store.search(project_id=project_id, query_vector=query_embedding[0])
         resolved_provider = self._resolve_provider(provider)
         if resolved_provider == "gemini":
-            async for token in self.gemini.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
+            async for token in self.gemini.generate_stream(
+                query=query, contexts=contexts, use_pro=use_pro, model=model, api_key=api_key
+            ):
                 yield token
             return
         if resolved_provider == "claude":
-            async for token in self.claude.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
+            async for token in self.claude.generate_stream(
+                query=query, contexts=contexts, use_pro=use_pro, model=model, api_key=api_key
+            ):
                 yield token
             return
-        async for token in self.openai.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
+        async for token in self.openai.generate_stream(
+            query=query, contexts=contexts, use_pro=use_pro, model=model, api_key=api_key
+        ):
             yield token
 
     def _resolve_provider(self, provider: str | None) -> str:

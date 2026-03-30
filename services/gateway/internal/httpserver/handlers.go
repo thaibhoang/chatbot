@@ -5,15 +5,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/thaibhoang/chatbot/services/gateway/internal/repository/postgres"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -118,6 +121,74 @@ func (s *Server) handleCreateAPIKey(c *gin.Context) {
 	})
 }
 
+type projectAIConfigPayload struct {
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	APIKey   string `json:"api_key"`
+}
+
+func (s *Server) handleUpsertProjectAIConfig(c *gin.Context) {
+	projectID := c.Param("projectId")
+	var payload projectAIConfigPayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+	provider, err := normalizeProvider(payload.Provider)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if strings.TrimSpace(payload.Model) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "model is required"})
+		return
+	}
+	if strings.TrimSpace(payload.APIKey) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "api_key is required"})
+		return
+	}
+	encryptedKey, err := s.secretCipher.Encrypt(payload.APIKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot encrypt api key"})
+		return
+	}
+	if err := s.projectAIConfig.UpsertActiveConfig(
+		c.Request.Context(),
+		projectID,
+		provider,
+		strings.TrimSpace(payload.Model),
+		encryptedKey,
+	); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot save ai config"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"project_id": projectID,
+		"provider":   provider,
+		"model":      strings.TrimSpace(payload.Model),
+		"status":     "active",
+	})
+}
+
+func (s *Server) handleGetProjectAIConfig(c *gin.Context) {
+	projectID := c.Param("projectId")
+	cfg, err := s.projectAIConfig.GetActiveConfig(c.Request.Context(), projectID)
+	if err != nil {
+		if errors.Is(err, postgres.ErrProjectAIConfigNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "ai config not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot load ai config"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"project_id": cfg.ProjectID,
+		"provider":   cfg.Provider,
+		"model":      cfg.Model,
+		"status":     cfg.Status,
+	})
+}
+
 func (s *Server) handleIngest(c *gin.Context) {
 	projectID, _ := c.Get("project_id")
 	fileHeader, err := c.FormFile("file")
@@ -188,9 +259,33 @@ func (s *Server) handleQuery(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
-
-	resp, err := s.callAIQuery(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro, payload.Provider)
+	if payload.Query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+	resolvedProvider, resolvedModel, resolvedAPIKey, err := s.resolveProjectModelConfig(
+		c.Request.Context(),
+		projectID.(string),
+		payload.Provider,
+	)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	resp, err := s.callAIQuery(
+		c.Request.Context(),
+		projectID.(string),
+		payload.Query,
+		payload.UsePro,
+		resolvedProvider,
+		resolvedModel,
+		resolvedAPIKey,
+	)
+	if err != nil {
+		if writeUpstreamError(c, err, "query failed") {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 		return
 	}
@@ -208,9 +303,33 @@ func (s *Server) handleQueryStream(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
-
-	res, err := s.callAIQueryStream(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro, payload.Provider)
+	if payload.Query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+	resolvedProvider, resolvedModel, resolvedAPIKey, err := s.resolveProjectModelConfig(
+		c.Request.Context(),
+		projectID.(string),
+		payload.Provider,
+	)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	res, err := s.callAIQueryStream(
+		c.Request.Context(),
+		projectID.(string),
+		payload.Query,
+		payload.UsePro,
+		resolvedProvider,
+		resolvedModel,
+		resolvedAPIKey,
+	)
+	if err != nil {
+		if writeUpstreamError(c, err, "query stream failed") {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query stream failed"})
 		return
 	}
@@ -243,6 +362,28 @@ type ingestResult struct {
 	ProjectID string `json:"project_id"`
 	Chunks    int    `json:"chunks"`
 	Status    string `json:"status"`
+}
+
+type upstreamHTTPError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *upstreamHTTPError) Error() string {
+	return fmt.Sprintf("upstream status: %d", e.StatusCode)
+}
+
+func writeUpstreamError(c *gin.Context, err error, fallbackMessage string) bool {
+	var upstreamErr *upstreamHTTPError
+	if !errors.As(err, &upstreamErr) {
+		return false
+	}
+	if strings.TrimSpace(upstreamErr.Body) != "" {
+		c.Data(upstreamErr.StatusCode, "application/json", []byte(upstreamErr.Body))
+		return true
+	}
+	c.JSON(upstreamErr.StatusCode, gin.H{"error": fallbackMessage})
+	return true
 }
 
 func (s *Server) callAIIngest(
@@ -284,7 +425,9 @@ func (s *Server) callAIIngest(
 	return &out, nil
 }
 
-func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePro bool, provider string) (gin.H, error) {
+func (s *Server) callAIQuery(
+	ctx context.Context, projectID, query string, usePro bool, provider, model, apiKey string,
+) (gin.H, error) {
 	payload := map[string]any{
 		"project_id": projectID,
 		"query":      query,
@@ -292,6 +435,12 @@ func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePr
 	}
 	if provider != "" {
 		payload["provider"] = provider
+	}
+	if model != "" {
+		payload["model"] = model
+	}
+	if apiKey != "" {
+		payload["api_key"] = apiKey
 	}
 	raw, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.AIEngineURL+"/query", bytes.NewReader(raw))
@@ -306,7 +455,11 @@ func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePr
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
-		return nil, fmt.Errorf("ai query status: %d", res.StatusCode)
+		body, _ := io.ReadAll(res.Body)
+		return nil, &upstreamHTTPError{
+			StatusCode: res.StatusCode,
+			Body:       string(body),
+		}
 	}
 	var out map[string]any
 	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
@@ -316,7 +469,7 @@ func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePr
 }
 
 func (s *Server) callAIQueryStream(
-	ctx context.Context, projectID, query string, usePro bool, provider string,
+	ctx context.Context, projectID, query string, usePro bool, provider, model, apiKey string,
 ) (*http.Response, error) {
 	payload := map[string]any{
 		"project_id": projectID,
@@ -325,6 +478,12 @@ func (s *Server) callAIQueryStream(
 	}
 	if provider != "" {
 		payload["provider"] = provider
+	}
+	if model != "" {
+		payload["model"] = model
+	}
+	if apiKey != "" {
+		payload["api_key"] = apiKey
 	}
 	raw, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.AIEngineURL+"/query:stream", bytes.NewReader(raw))
@@ -339,7 +498,56 @@ func (s *Server) callAIQueryStream(
 	}
 	if res.StatusCode >= 300 {
 		defer res.Body.Close()
-		return nil, fmt.Errorf("ai query stream status: %d", res.StatusCode)
+		body, _ := io.ReadAll(res.Body)
+		return nil, &upstreamHTTPError{
+			StatusCode: res.StatusCode,
+			Body:       string(body),
+		}
 	}
 	return res, nil
+}
+
+func (s *Server) resolveProjectModelConfig(
+	ctx context.Context, projectID, requestProvider string,
+) (provider string, model string, apiKey string, err error) {
+	if requestProvider != "" {
+		provider, err = normalizeProvider(requestProvider)
+		if err != nil {
+			return "", "", "", err
+		}
+	}
+	cfg, loadErr := s.projectAIConfig.GetActiveConfig(ctx, projectID)
+	if loadErr == nil {
+		if provider != "" && provider != cfg.Provider {
+			// Request-level provider override should not reuse credentials of another provider.
+			return provider, "", "", nil
+		}
+		decrypted, decErr := s.secretCipher.Decrypt(cfg.APIKeyEncrypted)
+		if decErr != nil {
+			return "", "", "", fmt.Errorf("cannot decrypt ai config key")
+		}
+		if provider == "" {
+			provider = cfg.Provider
+		}
+		model = cfg.Model
+		apiKey = decrypted
+		return provider, model, apiKey, nil
+	}
+	if !errors.Is(loadErr, postgres.ErrProjectAIConfigNotFound) {
+		return "", "", "", fmt.Errorf("cannot load project ai config")
+	}
+	return provider, "", "", nil
+}
+
+func normalizeProvider(provider string) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(provider))
+	if v == "" {
+		return "", fmt.Errorf("provider is required")
+	}
+	switch v {
+	case "openai", "gemini", "claude":
+		return v, nil
+	default:
+		return "", fmt.Errorf("provider must be one of: openai, gemini, claude")
+	}
 }

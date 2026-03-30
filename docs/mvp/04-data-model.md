@@ -8,9 +8,11 @@
 ## New Tables
 - `admin_users(id, email unique, password_hash, status, created_at, updated_at)`
 - `project_users(id, email unique, password_hash, project_id, status, created_at, updated_at)`
+- `project_ai_configs(id, project_id unique where active, provider, model, api_key_encrypted, status, created_at, updated_at)`
 
 ## Lifecycle
 - API key: create -> active -> revoke(optional MVP+1).
+- Project AI config: upsert active config theo project -> rotate key/model/provider bang upsert.
 - Document: processing -> ready|failed.
 
 ## Tenant Isolation Rules

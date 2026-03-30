@@ -7,6 +7,8 @@ class QueryRequest(BaseModel):
     query: str
     use_pro: bool = False
     provider: str | None = None
+    model: str | None = None
+    api_key: str | None = None
 
     @field_validator("provider")
     @classmethod

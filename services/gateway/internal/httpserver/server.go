@@ -12,6 +12,7 @@ import (
 	"github.com/thaibhoang/chatbot/services/gateway/internal/repository/postgres"
 	"github.com/thaibhoang/chatbot/services/gateway/internal/stream"
 	"github.com/thaibhoang/chatbot/services/gateway/pkg/config"
+	"github.com/thaibhoang/chatbot/services/gateway/pkg/crypto"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -21,6 +22,8 @@ type Server struct {
 	sseBroker       *stream.Broker
 	db              *sql.DB
 	apiKeyRepo      *postgres.APIKeyRepository
+	projectAIConfig *postgres.ProjectAIConfigRepository
+	secretCipher    *crypto.AESGCM
 	adminRepo       *postgres.AdminRepository
 	projectUserRepo *postgres.ProjectUserRepository
 }
@@ -37,12 +40,19 @@ func New(cfg config.Config) *Server {
 		log.Fatalf("open postgres: %v", err)
 	}
 
+	secretCipher, err := crypto.NewAESGCM(cfg.APIKeyEncryptionSecret)
+	if err != nil {
+		log.Fatalf("create key cipher: %v", err)
+	}
+
 	s := &Server{
 		cfg:             cfg,
 		router:          r,
 		sseBroker:       stream.NewBroker(),
 		db:              db,
 		apiKeyRepo:      postgres.NewAPIKeyRepository(db),
+		projectAIConfig: postgres.NewProjectAIConfigRepository(db),
+		secretCipher:    secretCipher,
 		adminRepo:       postgres.NewAdminRepository(db),
 		projectUserRepo: postgres.NewProjectUserRepository(db),
 	}
@@ -80,6 +90,8 @@ func (s *Server) routes() {
 	adminProtected.Use(middleware.AdminJWTAuth(s.cfg.AdminJWTKey))
 	adminProtected.POST("/users", s.handleCreateUser)
 	adminProtected.POST("/projects/:projectId/api-keys", s.handleCreateAPIKey)
+	adminProtected.PUT("/projects/:projectId/ai-config", s.handleUpsertProjectAIConfig)
+	adminProtected.GET("/projects/:projectId/ai-config", s.handleGetProjectAIConfig)
 
 	user := s.router.Group("/v1")
 	user.Use(middleware.AccessKeyAuth(s.apiKeyRepo))
