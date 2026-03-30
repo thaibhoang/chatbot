@@ -1,4 +1,5 @@
 import io
+from typing import AsyncIterator
 
 from fastapi import UploadFile
 from pypdf import PdfReader
@@ -44,6 +45,18 @@ class RAGPipeline:
         if self.settings.llm_provider == "gemini":
             return await self.gemini.generate(query=query, contexts=contexts, use_pro=use_pro)
         return await self.openai.generate(query=query, contexts=contexts, use_pro=use_pro)
+
+    async def answer_query_stream(self, project_id: str, query: str, use_pro: bool) -> AsyncIterator[str]:
+        query_embedding = await self.openai.embed_texts([query])
+        contexts = await self.vector_store.search(project_id=project_id, query_vector=query_embedding[0])
+        if self.settings.llm_provider == "gemini":
+            answer = await self.gemini.generate(query=query, contexts=contexts, use_pro=use_pro)
+            for token in answer.split(" "):
+                if token:
+                    yield token + " "
+            return
+        async for token in self.openai.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
+            yield token
 
     def _extract_text(self, file_name: str, content: bytes) -> str:
         lowered = file_name.lower()

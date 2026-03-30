@@ -1,4 +1,5 @@
 from openai import AsyncOpenAI
+from typing import AsyncIterator
 
 from app.core.settings import get_settings
 
@@ -42,4 +43,34 @@ class OpenAIClient:
             temperature=0.2,
         )
         return response.choices[0].message.content or ""
+
+    async def generate_stream(self, query: str, contexts: list[str], use_pro: bool) -> AsyncIterator[str]:
+        context_text = "\n\n".join(contexts[:8])
+        model = self.settings.openai_chat_model
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful assistant. Answer from provided context only. "
+                    "If context is insufficient, say that clearly."
+                ),
+            },
+            {
+                "role": "user",
+                "content": f"Question: {query}\n\nContext:\n{context_text}",
+            },
+        ]
+        _ = use_pro
+        stream = await self.client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.2,
+            stream=True,
+        )
+        async for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
 

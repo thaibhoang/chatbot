@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -195,6 +196,47 @@ func (s *Server) handleQuery(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+func (s *Server) handleQueryStream(c *gin.Context) {
+	projectID, _ := c.Get("project_id")
+	var payload struct {
+		Query  string `json:"query"`
+		UsePro bool   `json:"use_pro"`
+	}
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+
+	res, err := s.callAIQueryStream(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "query stream failed"})
+		return
+	}
+	defer res.Body.Close()
+
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Status(http.StatusOK)
+
+	reader := bufio.NewReader(res.Body)
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		default:
+			line, err := reader.ReadString('\n')
+			if len(line) > 0 {
+				_, _ = c.Writer.Write([]byte(line))
+				c.Writer.Flush()
+			}
+			if err != nil {
+				return
+			}
+		}
+	}
+}
+
 type ingestResult struct {
 	ProjectID string `json:"project_id"`
 	Chunks    int    `json:"chunks"`
@@ -266,4 +308,28 @@ func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePr
 		return nil, err
 	}
 	return out, nil
+}
+
+func (s *Server) callAIQueryStream(ctx context.Context, projectID, query string, usePro bool) (*http.Response, error) {
+	payload := map[string]any{
+		"project_id": projectID,
+		"query":      query,
+		"use_pro":    usePro,
+	}
+	raw, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.AIEngineURL+"/query:stream", bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	httpClient := &http.Client{Timeout: 5 * time.Minute}
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode >= 300 {
+		defer res.Body.Close()
+		return nil, fmt.Errorf("ai query stream status: %d", res.StatusCode)
+	}
+	return res, nil
 }

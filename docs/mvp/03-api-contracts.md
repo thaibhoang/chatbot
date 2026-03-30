@@ -17,6 +17,12 @@
 - `POST /v1/query` (Access Key headers)
   - Request: `{ "query": "...", "use_pro": false }`
   - Response: `{ "project_id": "uuid", "answer": "..." }`
+- `POST /v1/query:stream` (Access Key headers, SSE)
+  - Request: `{ "query": "...", "use_pro": false }`
+  - Response stream events:
+    - `event: token` with chunk payload
+    - `event: done` when completed
+    - `event: error` on failures
 
 ## Error Mapping
 - `401`: missing/invalid JWT or access key.

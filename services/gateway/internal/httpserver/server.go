@@ -6,12 +6,12 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gin-gonic/gin"
+	_ "github.com/lib/pq"
 	"github.com/thaibhoang/chatbot/services/gateway/internal/httpserver/middleware"
 	"github.com/thaibhoang/chatbot/services/gateway/internal/repository/postgres"
 	"github.com/thaibhoang/chatbot/services/gateway/internal/stream"
 	"github.com/thaibhoang/chatbot/services/gateway/pkg/config"
-	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -86,4 +86,5 @@ func (s *Server) routes() {
 	user.GET("/stream/:projectID", s.handleStream)
 	user.POST("/documents:ingest", s.handleIngest)
 	user.POST("/query", s.handleQuery)
+	user.POST("/query:stream", s.handleQueryStream)
 }

@@ -22,5 +22,7 @@
 2. Tao user + API key.
 3. Ingest 1 tai lieu.
 4. Query 1 cau hoi.
+5. Test stream query:
+   - `curl -N -X POST http://localhost:8080/v1/query:stream -H "X-Access-Key-Id: <id>" -H "X-Access-Key-Secret: <secret>" -H "Content-Type: application/json" -d '{"query":"...","use_pro":false}'`
 5. Hoac chay nhanh:
    - `./scripts/smoke_mvp.sh`
