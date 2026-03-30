@@ -23,7 +23,7 @@ services:
       context: .
       dockerfile: infra/docker/ai-engine.Dockerfile
     env_file:
-      - .env.example
+      - .env
     ports:
       - "8000:8000"
       - "50051:50051"
@@ -36,7 +36,7 @@ services:
       context: .
       dockerfile: infra/docker/gateway.Dockerfile
     env_file:
-      - .env.example
+      - .env
     ports:
       - "8080:8080"
     depends_on:

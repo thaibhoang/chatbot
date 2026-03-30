@@ -1,0 +1,26 @@
+# Local Runbook
+
+## Prerequisites
+- Docker + Docker Compose
+- Go toolchain
+- Python 3.11+
+
+## Env
+1. Copy `.env.example` -> `.env`.
+2. Dien `AI_ENGINE_OPENAI_API_KEY`.
+3. Khong commit `.env`.
+4. Dat `GATEWAY_ADMIN_JWT_KEY` khac gia tri mac dinh.
+
+## Run
+1. `docker compose up --build`
+2. Health check:
+   - Gateway: `GET /healthz`
+   - AI Engine: `GET /api/v1/health`
+
+## Smoke
+1. Admin login.
+2. Tao user + API key.
+3. Ingest 1 tai lieu.
+4. Query 1 cau hoi.
+5. Hoac chay nhanh:
+   - `./scripts/smoke_mvp.sh`

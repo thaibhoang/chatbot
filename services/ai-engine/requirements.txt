@@ -1,8 +1,10 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic-settings
 qdrant-client
 google-generativeai
+openai
 grpcio
 grpcio-tools
 python-multipart

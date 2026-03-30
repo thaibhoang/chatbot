@@ -1,12 +1,17 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
-func AccessKeyAuth() gin.HandlerFunc {
+type accessKeyRepo interface {
+	VerifyAccessKey(ctx context.Context, accessKeyID, secret string) (string, error)
+}
+
+func AccessKeyAuth(repo accessKeyRepo) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		accessKeyID := c.GetHeader("X-Access-Key-Id")
 		accessKeySecret := c.GetHeader("X-Access-Key-Secret")
@@ -15,8 +20,13 @@ func AccessKeyAuth() gin.HandlerFunc {
 			return
 		}
 
-		// TODO: verify with postgres hashed secret.
-		c.Set("project_id", "stub-project")
+		projectID, err := repo.VerifyAccessKey(c.Request.Context(), accessKeyID, accessKeySecret)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid access key"})
+			return
+		}
+
+		c.Set("project_id", projectID)
 		c.Next()
 	}
 }
