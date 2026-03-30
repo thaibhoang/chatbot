@@ -54,9 +54,3 @@ class RAGPipeline:
             doc = Document(io.BytesIO(content))
             return "\n".join([p.text for p in doc.paragraphs])
         return content.decode(errors="ignore")
-        return chunks
-
-    async def answer_query(self, project_id: str, query: str, use_pro: bool) -> str:
-        # Tenant isolation must always be enforced by project_id filter.
-        contexts = await self.vector_store.search(project_id=project_id, query=query)
-        return await self.llm.generate(query=query, contexts=contexts, use_pro=use_pro)
