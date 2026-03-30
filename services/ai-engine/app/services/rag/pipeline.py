@@ -6,9 +6,14 @@ from pypdf import PdfReader
 from docx import Document
 
 from app.core.settings import get_settings
+from app.integrations.claude_client import ClaudeClient
 from app.integrations.gemini_client import GeminiClient
 from app.integrations.openai_client import OpenAIClient
 from app.integrations.qdrant_client import QdrantStore
+
+
+class InvalidProviderError(ValueError):
+    pass
 
 
 class RAGPipeline:
@@ -17,6 +22,7 @@ class RAGPipeline:
         self.vector_store = QdrantStore()
         self.openai = OpenAIClient()
         self.gemini = GeminiClient()
+        self.claude = ClaudeClient()
 
     async def parse_and_chunk(self, file: UploadFile) -> tuple[str, list[str]]:
         file_name = file.filename or "document.txt"
@@ -38,25 +44,39 @@ class RAGPipeline:
             embeddings=embeddings,
         )
 
-    async def answer_query(self, project_id: str, query: str, use_pro: bool) -> str:
+    async def answer_query(self, project_id: str, query: str, use_pro: bool, provider: str | None = None) -> str:
         # Tenant isolation must always be enforced by project_id filter.
         query_embedding = await self.openai.embed_texts([query])
         contexts = await self.vector_store.search(project_id=project_id, query_vector=query_embedding[0])
-        if self.settings.llm_provider == "gemini":
+        resolved_provider = self._resolve_provider(provider)
+        if resolved_provider == "gemini":
             return await self.gemini.generate(query=query, contexts=contexts, use_pro=use_pro)
+        if resolved_provider == "claude":
+            return await self.claude.generate(query=query, contexts=contexts, use_pro=use_pro)
         return await self.openai.generate(query=query, contexts=contexts, use_pro=use_pro)
 
-    async def answer_query_stream(self, project_id: str, query: str, use_pro: bool) -> AsyncIterator[str]:
+    async def answer_query_stream(
+        self, project_id: str, query: str, use_pro: bool, provider: str | None = None
+    ) -> AsyncIterator[str]:
         query_embedding = await self.openai.embed_texts([query])
         contexts = await self.vector_store.search(project_id=project_id, query_vector=query_embedding[0])
-        if self.settings.llm_provider == "gemini":
-            answer = await self.gemini.generate(query=query, contexts=contexts, use_pro=use_pro)
-            for token in answer.split(" "):
-                if token:
-                    yield token + " "
+        resolved_provider = self._resolve_provider(provider)
+        if resolved_provider == "gemini":
+            async for token in self.gemini.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
+                yield token
+            return
+        if resolved_provider == "claude":
+            async for token in self.claude.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
+                yield token
             return
         async for token in self.openai.generate_stream(query=query, contexts=contexts, use_pro=use_pro):
             yield token
+
+    def _resolve_provider(self, provider: str | None) -> str:
+        resolved = (provider or self.settings.llm_provider).strip().lower()
+        if resolved not in {"openai", "gemini", "claude"}:
+            raise InvalidProviderError(f"unsupported provider: {resolved}")
+        return resolved
 
     def _extract_text(self, file_name: str, content: bytes) -> str:
         lowered = file_name.lower()

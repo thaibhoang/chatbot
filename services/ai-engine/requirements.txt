@@ -5,6 +5,7 @@ pydantic-settings
 qdrant-client
 google-generativeai
 openai
+anthropic
 grpcio
 grpcio-tools
 python-multipart

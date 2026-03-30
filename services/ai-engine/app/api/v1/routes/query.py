@@ -1,10 +1,10 @@
 import json
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from app.models.query import QueryRequest, QueryResponse
-from app.services.rag.pipeline import RAGPipeline
+from app.services.rag.pipeline import InvalidProviderError, RAGPipeline
 
 router = APIRouter()
 
@@ -12,11 +12,15 @@ router = APIRouter()
 @router.post("", response_model=QueryResponse)
 async def run_query(payload: QueryRequest) -> QueryResponse:
     pipeline = RAGPipeline()
-    answer = await pipeline.answer_query(
-        project_id=payload.project_id,
-        query=payload.query,
-        use_pro=payload.use_pro,
-    )
+    try:
+        answer = await pipeline.answer_query(
+            project_id=payload.project_id,
+            query=payload.query,
+            use_pro=payload.use_pro,
+            provider=payload.provider,
+        )
+    except InvalidProviderError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return QueryResponse(project_id=payload.project_id, answer=answer)
 
 
@@ -30,9 +34,12 @@ async def run_query_stream(payload: QueryRequest) -> StreamingResponse:
                 project_id=payload.project_id,
                 query=payload.query,
                 use_pro=payload.use_pro,
+                provider=payload.provider,
             ):
                 yield f"event: token\ndata: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
             yield "event: done\ndata: {}\n\n"
+        except InvalidProviderError as exc:
+            yield f"event: error\ndata: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
         except Exception as exc:
             yield f"event: error\ndata: {json.dumps({'error': str(exc)}, ensure_ascii=False)}\n\n"
 

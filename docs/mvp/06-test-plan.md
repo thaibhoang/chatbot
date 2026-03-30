@@ -16,6 +16,13 @@
 ## Query
 - [ ] Query tra answer co context retrieval.
 - [ ] Query stream tra event `token` va ket thuc bang `done`.
+- [ ] Query khong gui `provider` van fallback theo `AI_ENGINE_LLM_PROVIDER`.
+- [ ] Query gui `provider=openai|gemini|claude` tra ket qua hop le (khi key hop le).
+- [ ] Query gui `provider` khong hop le bi tu choi voi 4xx.
+- [ ] Query stream voi `provider=gemini|claude` van co event `token` va `done`.
+
+## Provider Scope
+- [ ] Xac nhan embedding/retrieval van dung OpenAI cho moi provider generation.
 
 ## Smoke E2E
 - [ ] login -> create user -> create key -> ingest -> query.

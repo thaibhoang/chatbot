@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     gemini_flash_model: str = "gemini-1.5-flash"
     gemini_pro_model: str = "gemini-1.5-pro"
     gemini_api_key: str = ""
+    claude_api_key: str = ""
+    claude_model: str = "claude-3-5-sonnet-latest"
 
 
 @lru_cache

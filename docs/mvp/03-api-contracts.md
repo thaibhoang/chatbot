@@ -15,10 +15,11 @@
   - multipart: `file`
   - Response: `{ "document_id": "uuid", "status": "processing|ready|failed", "chunks": 0 }`
 - `POST /v1/query` (Access Key headers)
-  - Request: `{ "query": "...", "use_pro": false }`
+  - Request: `{ "query": "...", "use_pro": false, "provider": "openai|gemini|claude" }`
+  - `provider` la optional; neu bo qua se fallback ve provider cau hinh tren AI Engine.
   - Response: `{ "project_id": "uuid", "answer": "..." }`
 - `POST /v1/query:stream` (Access Key headers, SSE)
-  - Request: `{ "query": "...", "use_pro": false }`
+  - Request: `{ "query": "...", "use_pro": false, "provider": "openai|gemini|claude" }`
   - Response stream events:
     - `event: token` with chunk payload
     - `event: done` when completed

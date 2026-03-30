@@ -180,15 +180,16 @@ func (s *Server) handleIngest(c *gin.Context) {
 func (s *Server) handleQuery(c *gin.Context) {
 	projectID, _ := c.Get("project_id")
 	var payload struct {
-		Query  string `json:"query"`
-		UsePro bool   `json:"use_pro"`
+		Query    string `json:"query"`
+		UsePro   bool   `json:"use_pro"`
+		Provider string `json:"provider"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
 
-	resp, err := s.callAIQuery(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro)
+	resp, err := s.callAIQuery(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro, payload.Provider)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query failed"})
 		return
@@ -199,15 +200,16 @@ func (s *Server) handleQuery(c *gin.Context) {
 func (s *Server) handleQueryStream(c *gin.Context) {
 	projectID, _ := c.Get("project_id")
 	var payload struct {
-		Query  string `json:"query"`
-		UsePro bool   `json:"use_pro"`
+		Query    string `json:"query"`
+		UsePro   bool   `json:"use_pro"`
+		Provider string `json:"provider"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
 
-	res, err := s.callAIQueryStream(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro)
+	res, err := s.callAIQueryStream(c.Request.Context(), projectID.(string), payload.Query, payload.UsePro, payload.Provider)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "query stream failed"})
 		return
@@ -282,11 +284,14 @@ func (s *Server) callAIIngest(
 	return &out, nil
 }
 
-func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePro bool) (gin.H, error) {
+func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePro bool, provider string) (gin.H, error) {
 	payload := map[string]any{
 		"project_id": projectID,
 		"query":      query,
 		"use_pro":    usePro,
+	}
+	if provider != "" {
+		payload["provider"] = provider
 	}
 	raw, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.AIEngineURL+"/query", bytes.NewReader(raw))
@@ -310,11 +315,16 @@ func (s *Server) callAIQuery(ctx context.Context, projectID, query string, usePr
 	return out, nil
 }
 
-func (s *Server) callAIQueryStream(ctx context.Context, projectID, query string, usePro bool) (*http.Response, error) {
+func (s *Server) callAIQueryStream(
+	ctx context.Context, projectID, query string, usePro bool, provider string,
+) (*http.Response, error) {
 	payload := map[string]any{
 		"project_id": projectID,
 		"query":      query,
 		"use_pro":    usePro,
+	}
+	if provider != "" {
+		payload["provider"] = provider
 	}
 	raw, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.cfg.AIEngineURL+"/query:stream", bytes.NewReader(raw))
