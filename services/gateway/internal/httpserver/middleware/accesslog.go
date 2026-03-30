@@ -3,7 +3,7 @@ package middleware
 import (
 	"time"
 
-	"github.com/amcolab/omni-rag/services/gateway/pkg/logger"
+	"github.com/thaibhoang/chatbot/services/gateway/pkg/logger"
 	"github.com/gin-gonic/gin"
 )
 

@@ -3,8 +3,8 @@ package main
 import (
 	"log"
 
-	"github.com/amcolab/omni-rag/services/gateway/internal/httpserver"
-	"github.com/amcolab/omni-rag/services/gateway/pkg/config"
+	"github.com/thaibhoang/chatbot/services/gateway/internal/httpserver"
+	"github.com/thaibhoang/chatbot/services/gateway/pkg/config"
 )
 
 func main() {

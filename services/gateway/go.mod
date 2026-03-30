@@ -1,4 +1,4 @@
-module github.com/amcolab/omni-rag/services/gateway
+module github.com/thaibhoang/chatbot/services/gateway
 
 go 1.22
 

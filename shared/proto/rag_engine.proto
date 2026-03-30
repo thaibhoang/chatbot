@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package ragsvc.v1;
 
-option go_package = "github.com/amcolab/omni-rag/shared/gen/go/ragsvc/v1;ragsvcv1";
+option go_package = "github.com/thaibhoang/chatbot/shared/gen/go/ragsvc/v1;ragsvcv1";
 
 message IngestRequest {
   string project_id = 1;
