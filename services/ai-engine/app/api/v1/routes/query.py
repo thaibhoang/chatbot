@@ -15,7 +15,9 @@ async def run_query(payload: QueryRequest) -> QueryResponse:
     try:
         answer = await pipeline.answer_query(
             project_id=payload.project_id,
+            customer_id=payload.customer_id,
             query=payload.query,
+            conversation_id=payload.conversation_id,
             use_pro=payload.use_pro,
             provider=payload.provider,
             model=payload.model,
@@ -39,7 +41,9 @@ async def run_query_stream(payload: QueryRequest) -> StreamingResponse:
         try:
             async for token in pipeline.answer_query_stream(
                 project_id=payload.project_id,
+                customer_id=payload.customer_id,
                 query=payload.query,
+                conversation_id=payload.conversation_id,
                 use_pro=payload.use_pro,
                 provider=payload.provider,
                 model=payload.model,

@@ -11,3 +11,5 @@ grpcio-tools
 python-multipart
 pypdf
 python-docx
+redis
+asyncpg

@@ -251,9 +251,11 @@ func (s *Server) handleIngest(c *gin.Context) {
 func (s *Server) handleQuery(c *gin.Context) {
 	projectID, _ := c.Get("project_id")
 	var payload struct {
-		Query    string `json:"query"`
-		UsePro   bool   `json:"use_pro"`
-		Provider string `json:"provider"`
+		Query          string `json:"query"`
+		CustomerID     string `json:"customer_id"`
+		ConversationID string `json:"conversation_id"`
+		UsePro         bool   `json:"use_pro"`
+		Provider       string `json:"provider"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
@@ -261,6 +263,10 @@ func (s *Server) handleQuery(c *gin.Context) {
 	}
 	if payload.Query == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+	if strings.TrimSpace(payload.CustomerID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "customer_id is required"})
 		return
 	}
 	resolvedProvider, resolvedModel, resolvedAPIKey, err := s.resolveProjectModelConfig(
@@ -276,6 +282,8 @@ func (s *Server) handleQuery(c *gin.Context) {
 	resp, err := s.callAIQuery(
 		c.Request.Context(),
 		projectID.(string),
+		payload.CustomerID,
+		payload.ConversationID,
 		payload.Query,
 		payload.UsePro,
 		resolvedProvider,
@@ -295,9 +303,11 @@ func (s *Server) handleQuery(c *gin.Context) {
 func (s *Server) handleQueryStream(c *gin.Context) {
 	projectID, _ := c.Get("project_id")
 	var payload struct {
-		Query    string `json:"query"`
-		UsePro   bool   `json:"use_pro"`
-		Provider string `json:"provider"`
+		Query          string `json:"query"`
+		CustomerID     string `json:"customer_id"`
+		ConversationID string `json:"conversation_id"`
+		UsePro         bool   `json:"use_pro"`
+		Provider       string `json:"provider"`
 	}
 	if err := c.ShouldBindJSON(&payload); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
@@ -305,6 +315,10 @@ func (s *Server) handleQueryStream(c *gin.Context) {
 	}
 	if payload.Query == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+	if strings.TrimSpace(payload.CustomerID) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "customer_id is required"})
 		return
 	}
 	resolvedProvider, resolvedModel, resolvedAPIKey, err := s.resolveProjectModelConfig(
@@ -320,6 +334,8 @@ func (s *Server) handleQueryStream(c *gin.Context) {
 	res, err := s.callAIQueryStream(
 		c.Request.Context(),
 		projectID.(string),
+		payload.CustomerID,
+		payload.ConversationID,
 		payload.Query,
 		payload.UsePro,
 		resolvedProvider,
@@ -426,12 +442,14 @@ func (s *Server) callAIIngest(
 }
 
 func (s *Server) callAIQuery(
-	ctx context.Context, projectID, query string, usePro bool, provider, model, apiKey string,
+	ctx context.Context, projectID, customerID, conversationID, query string, usePro bool, provider, model, apiKey string,
 ) (gin.H, error) {
 	payload := map[string]any{
-		"project_id": projectID,
-		"query":      query,
-		"use_pro":    usePro,
+		"project_id":      projectID,
+		"customer_id":     customerID,
+		"conversation_id": conversationID,
+		"query":           query,
+		"use_pro":         usePro,
 	}
 	if provider != "" {
 		payload["provider"] = provider
@@ -469,12 +487,14 @@ func (s *Server) callAIQuery(
 }
 
 func (s *Server) callAIQueryStream(
-	ctx context.Context, projectID, query string, usePro bool, provider, model, apiKey string,
+	ctx context.Context, projectID, customerID, conversationID, query string, usePro bool, provider, model, apiKey string,
 ) (*http.Response, error) {
 	payload := map[string]any{
-		"project_id": projectID,
-		"query":      query,
-		"use_pro":    usePro,
+		"project_id":      projectID,
+		"customer_id":     customerID,
+		"conversation_id": conversationID,
+		"query":           query,
+		"use_pro":         usePro,
 	}
 	if provider != "" {
 		payload["provider"] = provider

@@ -1,5 +1,6 @@
 from openai import AsyncOpenAI
 from typing import AsyncIterator
+import json
 
 from app.core.settings import get_settings
 
@@ -89,4 +90,36 @@ class OpenAIClient:
             delta = chunk.choices[0].delta.content
             if delta:
                 yield delta
+
+    async def extract_facts(self, project_id: str, customer_id: str, transcript: list[dict[str, str]]) -> list[str]:
+        if not transcript:
+            return []
+        prompt = {
+            "project_id": project_id,
+            "customer_id": customer_id,
+            "transcript": transcript,
+            "task": (
+                "Extract durable customer facts only (preferences, constraints, recurring issues, profile details). "
+                "Return max 8 concise facts as JSON array of strings. Exclude one-off greetings."
+            ),
+        }
+        response = await self.client.chat.completions.create(
+            model=self.settings.openai_extractor_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You extract long-term memory facts for CRM assistant. Output strict JSON array of strings.",
+                },
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            temperature=0.0,
+        )
+        raw = response.choices[0].message.content or "[]"
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(item).strip() for item in parsed if str(item).strip()]
+        except json.JSONDecodeError:
+            return []
+        return []
 
